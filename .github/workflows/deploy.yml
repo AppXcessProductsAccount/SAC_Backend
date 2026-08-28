@@ -1,0 +1,156 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE: appxcess/selfawareness-backend
+  DOCKER_VERSION: latest
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_VERSION }}
+            ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create deploy directory on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          "mkdir -p /home/${{ secrets.EC2_USER }}/meditation"
+
+      - name: Upload docker-compose.prod.yml to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no docker-compose.prod.yml \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/meditation/docker-compose.yml
+
+      - name: Create and Upload .env to EC2
+        run: |
+          cat << 'EOF' > .env
+          ${{ secrets.ENV }}
+          EOF
+          scp -o StrictHostKeyChecking=no .env \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/meditation/.env
+          rm .env
+
+      - name: Upload Alembic configuration and migrations to EC2
+        run: |
+          # Upload alembic.ini
+          scp -o StrictHostKeyChecking=no alembic.ini \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/meditation/alembic.ini
+          
+          # Create alembic/versions directory on EC2
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          "mkdir -p /home/${{ secrets.EC2_USER }}/meditation/alembic/versions"
+          
+          # Upload env.py
+          scp -o StrictHostKeyChecking=no alembic/env.py \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/meditation/alembic/env.py
+
+          # Upload all migration files
+          if [ -d "alembic/versions" ]; then
+            scp -o StrictHostKeyChecking=no alembic/versions/*.py \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/meditation/alembic/versions/
+          fi
+
+      - name: Ensure data directories exist on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash << 'DATA_DIR_SCRIPT'
+          set -e
+          echo "📁 Ensuring data directories exist"
+          cd /home/${{ secrets.EC2_USER }}/meditation
+          mkdir -p ./data/db/postgres/data
+          mkdir -p ./data/db/redis/data
+          echo "✅ Data directories ready"
+          DATA_DIR_SCRIPT
+
+      - name: Deploy to EC2 using docker-compose
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash << 'DEPLOY_SCRIPT'
+          set -e
+
+          echo "🔐 Logging into DockerHub"
+          echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin
+
+          echo "📁 Moving into project directory"
+          cd /home/${{ secrets.EC2_USER }}/meditation
+
+          echo "🔓 Adjusting permissions"
+          chmod 644 .env || true
+          chmod 644 alembic.ini || true
+          chmod -R 755 alembic || true
+
+          echo "🔍 Checking Docker Compose configuration"
+          docker compose config
+
+          echo "⬇️ Pulling latest images"
+          docker compose pull
+
+          echo "📊 Checking available images"
+          docker images | grep selfawareness-backend || true
+
+          echo "🔄 Stopping and removing any existing backend"
+          docker compose stop backend || true
+          docker compose rm -f backend || true
+          docker rm -f meditation_backend || true
+
+          echo "🚀 Starting all services"
+          docker compose up -d
+
+          echo "⏳ Waiting for services to stabilize..."
+          sleep 15
+
+          echo "📊 Current container status:"
+          docker compose ps
+          DEPLOY_SCRIPT
+
+      - name: Verify deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash << 'VERIFY_SCRIPT'
+          echo "🔍 Checking backend container status"
+          cd /home/${{ secrets.EC2_USER }}/meditation
+
+          CONTAINER_STATUS=$(docker inspect meditation_backend --format '{{.State.Status}}' 2>/dev/null || echo "not_found")
+          echo "Container status: $CONTAINER_STATUS"
+
+          if [ "$CONTAINER_STATUS" = "running" ]; then
+            echo "✅ Backend container is running"
+          else
+            echo "❌ Backend container is NOT running (status: $CONTAINER_STATUS)"
+            echo "📊 All containers (including stopped):"
+            docker ps -a
+            echo "📝 Backend logs:"
+            docker compose logs --tail 100 backend
+            exit 1
+          fi
+          VERIFY_SCRIPT
