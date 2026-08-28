@@ -326,6 +326,25 @@ FOOTER_SECTION_ID = "footer"
 def upgrade() -> None:
     conn = op.get_bind()
 
+    # The inserts below stay re-runnable through ON CONFLICT, but that clause arbitrates
+    # only the unique column it names - the row still draws an id from the sequence
+    # first. Rows seeded with an explicit id never advance that sequence, so it hands
+    # back an id that is already taken and the insert dies on cms_pages_pkey, which
+    # ON CONFLICT (name) is not watching. Resync both sequences to max(id) first.
+    # setval is strict, so a table without a serial id yields NULL rather than an error.
+    for table in ("cms_pages", "sections"):
+        conn.execute(
+            sa.text(
+                f"""
+                SELECT setval(
+                    pg_get_serial_sequence('{table}', 'id'),
+                    COALESCE((SELECT MAX(id) FROM {table}), 0) + 1,
+                    false
+                )
+                """
+            )
+        )
+
     for name, section_id, content in LEGAL_PAGES:
         # ON CONFLICT DO NOTHING on both statements: this migration must be safe to
         # re-run against a production database that already has these pages, and it
