@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
 
-from app.schema.phone import OptionalPhoneNumber
+from app.schema.phone import OptionalReachablePhone
 
 class ContactBase(BaseModel):
     full_name: str
@@ -21,7 +21,7 @@ class ContactCreate(ContactBase):
     would re-run the check on every stored enquiry, and one row saved before this
     validation existed would then break the whole admin list.
     """
-    phone: OptionalPhoneNumber = None
+    phone: OptionalReachablePhone = None
 
 class ContactSchema(ContactBase):
     id: int
