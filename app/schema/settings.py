@@ -32,6 +32,9 @@ class AppSettingsResponse(BaseModel):
     notify_membership_application: bool
     notify_participant: bool
     notification_poll_seconds: int
+    event_grand_meditation_enabled: bool
+    event_announcement_enabled: bool
+    event_grand_meditation_content: dict | None = None
     updated_at: datetime | None = None
 
     class Config:
@@ -50,6 +53,9 @@ class PublicSettings(BaseModel):
     organisation_name: str | None = None
     support_email: str | None = None
     support_phone: str | None = None
+    event_grand_meditation_enabled: bool
+    event_announcement_enabled: bool
+    event_grand_meditation_content: dict | None = None
 
 
 class AppSettingsUpdate(BaseModel):
@@ -73,6 +79,9 @@ class AppSettingsUpdate(BaseModel):
     notify_membership_application: bool | None = None
     notify_participant: bool | None = None
     notification_poll_seconds: int | None = Field(default=None, ge=15, le=3600)
+    event_grand_meditation_enabled: bool | None = None
+    event_announcement_enabled: bool | None = None
+    event_grand_meditation_content: dict | None = None
 
     @field_validator("default_currency")
     @classmethod

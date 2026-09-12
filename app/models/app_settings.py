@@ -61,6 +61,21 @@ class AppSettings(Base):
     notify_participant: Mapped[bool] = mapped_column(Boolean, default=True)
     notification_poll_seconds: Mapped[int] = mapped_column(Integer, default=60)
 
+    # Feature flags — pages an operator can publish or retract without a deploy.
+    # When off, the website hides both the /events/grand-group-meditation route
+    # and its entry in the Events navigation dropdown.
+    event_grand_meditation_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # The scrolling announcement bar at the top of the site for this event.
+    event_announcement_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Editable content for that page: the Guru and the three remembered masters,
+    # each with a name and an optional uploaded image. Shape:
+    #   {"guru_name": str, "guru_image": str|null,
+    #    "masters": [{"name": str, "image": str|null}, ...three]}
+    # Null means "use the page's built-in defaults".
+    event_grand_meditation_content: Mapped[dict | None] = mapped_column(sa.JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime, server_default=func.now(), onupdate=func.now()
