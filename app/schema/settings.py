@@ -35,6 +35,7 @@ class AppSettingsResponse(BaseModel):
     event_grand_meditation_enabled: bool
     event_announcement_enabled: bool
     event_grand_meditation_content: dict | None = None
+    home_videos: dict | None = None
     updated_at: datetime | None = None
 
     class Config:
@@ -56,6 +57,7 @@ class PublicSettings(BaseModel):
     event_grand_meditation_enabled: bool
     event_announcement_enabled: bool
     event_grand_meditation_content: dict | None = None
+    home_videos: dict | None = None
 
 
 class AppSettingsUpdate(BaseModel):
@@ -82,6 +84,7 @@ class AppSettingsUpdate(BaseModel):
     event_grand_meditation_enabled: bool | None = None
     event_announcement_enabled: bool | None = None
     event_grand_meditation_content: dict | None = None
+    home_videos: dict | None = None
 
     @field_validator("default_currency")
     @classmethod

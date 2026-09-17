@@ -76,6 +76,10 @@ class AppSettings(Base):
     # Null means "use the page's built-in defaults".
     event_grand_meditation_content: Mapped[dict | None] = mapped_column(sa.JSON, nullable=True)
 
+    # Home-page video rails. Shape: {"youtube": [url, ...], "tiktok": [url, ...]}.
+    # Rendered as two separate side-by-side sections on the landing page.
+    home_videos: Mapped[dict | None] = mapped_column(sa.JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime, server_default=func.now(), onupdate=func.now()
