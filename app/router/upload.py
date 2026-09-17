@@ -35,11 +35,14 @@ async def upload_file(file: UploadFile = File(...)):
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
     
     try:
+        # The multipart parser leaves the spooled file's cursor at the end, so
+        # rewind before copying — otherwise a 0-byte file is written.
+        file.file.seek(0)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save file locally: {str(e)}")
-    
+
     return {"url": f"/uploads/{unique_filename}"}
 
 @router.post("/multiple")
@@ -62,6 +65,7 @@ async def upload_multiple_files(files: List[UploadFile] = File(...)):
         file_path = os.path.join(UPLOAD_DIR, unique_filename)
         
         try:
+            file.file.seek(0)
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
             urls.append(f"/uploads/{unique_filename}")
