@@ -12,6 +12,8 @@ services:
     volumes:
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      # Persist locally-stored uploads across redeploys (when S3 is not configured).
+      - ./data/uploads:/app/uploads
     depends_on:
       - postgres
       - redis

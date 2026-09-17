@@ -91,6 +91,8 @@ jobs:
           cd /home/${{ secrets.EC2_USER }}/meditation
           mkdir -p ./data/db/postgres/data
           mkdir -p ./data/db/redis/data
+          mkdir -p ./data/uploads
+          chmod 777 ./data/uploads || true
           echo "✅ Data directories ready"
           DATA_DIR_SCRIPT
 
